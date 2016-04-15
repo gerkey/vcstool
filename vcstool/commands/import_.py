@@ -30,23 +30,40 @@ def get_parser():
 
 
 def get_repositories(yaml_file):
-    try:
-        root = yaml.load(yaml_file)
-    except yaml.YAMLError as e:
-        raise RuntimeError('Input data is not valid yaml format: %s' % e)
-
-    try:
-        repositories = root['repositories']
-        return get_repos_in_vcstool_format(repositories)
-    except AttributeError as e:
-        raise RuntimeError('Input data is not valid format: %s' % e)
-    except TypeError as e:
-        # try rosinstall file format
+    in_files = [yaml_file]
+    out_files = []
+    while len(in_files):
+        inf = in_files[0]
+        for l in inf.read().split('\n'):
+            s = l.split()
+            if len(s) == 2 and s[0] == '#INCLUDE':
+                in_files.append(open(s[1], 'r'))
+        inf.seek(0)
+        out_files.append(inf)
+        del in_files[0]
+    
+    repos = {}
+    out_files.reverse()
+    for y in out_files:
         try:
-            return get_repos_in_rosinstall_format(root)
-        except Exception:
+            root = yaml.load(y)
+        except yaml.YAMLError as e:
+            raise RuntimeError('Input data is not valid yaml format: %s' % e)
+    
+        try:
+            repositories = root['repositories']
+            for k,v in get_repos_in_vcstool_format(repositories).items():
+                repos[k] = v
+        except AttributeError as e:
             raise RuntimeError('Input data is not valid format: %s' % e)
-
+        except TypeError as e:
+            # try rosinstall file format
+            try:
+                for k,v in get_repos_in_rosinstall_format(repositories).items():
+                    repos[k] = v
+            except Exception:
+                raise RuntimeError('Input data is not valid format: %s' % e)
+    return repos
 
 def get_repos_in_vcstool_format(repositories):
     repos = {}
